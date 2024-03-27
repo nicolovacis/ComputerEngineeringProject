@@ -6,4 +6,3 @@ with open('FaultList.csv', 'w', newline='') as csvfile:
                             quotechar='|', quoting=csv.QUOTE_MINIMAL)
     for i in range (5):
         spamwriter.writerow(['Spam'] * 5 + ['Baked Beans'])
-        spamwriter.writerow(['x', 'Lovely Spam', 'Wonderful Spam'])
