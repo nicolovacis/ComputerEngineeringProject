@@ -11,14 +11,15 @@ with open('FaultList.csv', 'w', newline='') as csvfile:
 
         if k.endswith(".weight"):
             tensorWeights = weights.get(k)
-            l=random.randint(1,20)
+            l=random.randint(1,5)
             for j in range(l):
                 tensorWeights_size_list=list(tensorWeights.size())
 
-                if(len(tensorWeights_size_list)==4):
-                    x=random.randint(0, tensorWeights_size_list[0]-1)
-                    y=random.randint(0, tensorWeights_size_list[1]-1)
-                    z=random.randint(0, tensorWeights_size_list[2]-1)
-                    w=random.randint(0, tensorWeights_size_list[3]-1)
-                    spamwriter.writerow([i] + [k] + ["([x],[y],[z],[w])"], ...)
+                list=[]
+
+                for t in len(tensorWeights_size_list):
+                    x=random.randint(0, tensorWeights_size_list[t]-1)
+                    list.append(x)
+
+                spamwriter.writerow([i] + [k] + [list] + [...]) #aggiungere bit da flippare
             i+=1
