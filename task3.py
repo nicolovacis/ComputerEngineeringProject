@@ -17,5 +17,5 @@ with open('FaultList.csv', 'w', newline='') as csvfile:
                 y=random.randint(0, len(tensorWeights[x])-1)
                 z=random.randint(0, len(tensorWeights[x][y])-1)
                 w=random.randint(0, len(tensorWeights[x][y][z])-1)
-            spamwriter.writerow([i] + [k] + ["([x],[y],[z],[w])"], ...)
+                spamwriter.writerow([i] + [k] + ["([x],[y],[z],[w])"], ...)
             i+=1
