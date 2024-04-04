@@ -3,8 +3,8 @@ import random
 
 with open('FaultList.csv', 'w', newline='') as csvfile:
     # CREAZIONE FILE CSV
-    spamwriter = csv.writer(csvfile, delimiter=' ',
-                            quotechar='|', quoting=csv.QUOTE_MINIMAL)
+    spamwriter = csv.writer(csvfile, delimiter=',',
+                            quotechar=' ', quoting=csv.QUOTE_MINIMAL)
 
     i=0
 
@@ -21,7 +21,7 @@ with open('FaultList.csv', 'w', newline='') as csvfile:
                 x = random.randint(0, dimTensor - 1)
                 listOut.append(x)
 
-            bit = "bit"
+            bit = random.randint(0, 31)
             # AGGIUNGO LA RIGA AL CSV
             spamwriter.writerow([i] + [k] + [listOut] + [bit])  # aggiungere bit da flippare
             i += 1
