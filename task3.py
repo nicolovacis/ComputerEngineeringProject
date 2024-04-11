@@ -22,6 +22,9 @@ with open('FaultList.csv', 'w', newline='') as csvfile:
                 listOut.append(x)
 
             bit = random.randint(0, 31)
+
             # AGGIUNGO LA RIGA AL CSV
             spamwriter.writerow([i] + [k] + [listOut] + [bit])  # aggiungere bit da flippare
             i += 1
+
+# media pesata al posto di random tra a e b -> il totale è gli elementi della lista moltiplicati 4x3x2x5

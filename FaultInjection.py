@@ -1,5 +1,6 @@
 # CHECK integerWeights[weightToChange]
 import csv
+import torch
 
 
 def model_execution():
@@ -44,6 +45,7 @@ def update_weights(floatWeights, weightToChange, bitToChange):
 
     bit = 1 << bitToChange  # x << y insert x followed by y times 0
     integerWeights[weightToChange] ^= bit  # sum bit to the previous number
+    # to flip back xor again with the same bit
 
     updatedWeights = integerWeights.view(torch.float32)
 
@@ -84,9 +86,14 @@ with open('FaultList.csv', newline='') as csvfile:
 
         outputDict[injectionNumber] = outputModel
 
-        # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS
+        # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS -- do xor again
         with torch.no_grad():
             weights[layerInjected] = copyWeights
 
 # WRITING outputDict ON A FILE
 output_file_write(outputDict)
+
+# masked tutto uguale
+# non_critical top1 uguale, ma il resto del vettore diverso
+# critical top 1 cambia
+# file con num inienzioni, top1correct, top1 robust, masked, non critical, critical
