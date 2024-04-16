@@ -6,49 +6,21 @@ loader = torch.utils.data.DataLoader(transformed_dataset, batch_size=32, shuffle
                                      pin_memory=True)
 
 
-class Node:
-    def __init__(self, data):
-        self.data = data
-        self.next = None
-
-
-def create_linked_list(classesAccuracy):
-    head = None
+def generate_output_model(classesAccuracy):
+    output = {}
+    maxAccuracy = 0
+    maxClassName = None
 
     # Calculate the accuracy for each class and insert into the linked list
     for className, result in classesAccuracy.items():
         classAccuracy = result[1] / result[0]
-        head = insert_node_class(head, className, classAccuracy)
+        if classAccuracy >= maxAccuracy:
+            maxAccuracy = classAccuracy
+            maxClassName = className
 
-    return head
+        output[className] = classAccuracy
 
-
-def insert_node_class(head, nameClass, accuracyClass):
-    node = Node((nameClass, accuracyClass))
-
-    if head is None:
-        head = node
-        return head
-
-    current = head
-    prev = None
-
-    while current.next is not None and current.next.data[1] >= accuracyClass:
-        prev = current
-        current = current.next
-
-    if current.data[1] < accuracyClass:
-        if prev is None:
-            node.next = head
-            head = node
-        else:
-            prev.next = node
-            node.next = current
-    else:
-        node.next = current.next
-        current.next = node
-
-    return head
+    return output, maxClassName
 
 
 def model_execution():
@@ -87,13 +59,45 @@ def model_execution():
                     else:
                         classesAccuracy[className] = [1, 0]
 
-        head = create_linked_list(classesAccuracy)
+        outputModelAccuracy, topOneCorrect = generate_output_model(classesAccuracy)
 
-        return head
+        return outputModelAccuracy, topOneCorrect
 
 
-def calculate_output_row(outputGoldModel, outputModel):
-    return
+def map_to_array(classesAccuracy):
+    classesAccuracyArr = [(className, accuracy) for className, accuracy in classesAccuracy.items()]
+
+    classesSortedAccuracyArr = sorted(classesAccuracyArr, key=lambda x: x[1], reverse=True)
+
+    classesSortedArr = [item[0] for item in classesSortedAccuracyArr]
+
+    return classesSortedArr
+
+
+def calculate_top_one_robust(outputGoldModel, outputModel):
+    minVariation = int("inf")
+    topOneRobustClass = None
+
+    for className in outputGoldModel.keys():
+        variation = outputGoldModel[className] - outputModel[className]
+
+        if variation < minVariation:
+            minVariation = variation
+            topOneRobustClass = className
+
+    return topOneRobustClass
+
+
+def calculate_metrics(outputGoldModelArr, outputModel):
+    outputModelArr = map_to_array(outputModel)
+
+    if outputGoldModelArr == outputModelArr:
+        return 1, 0, 0
+
+    if outputGoldModelArr[0] == outputModelArr[0]:
+        return 0, 1, 0
+
+    return 0, 0, 1
 
 
 def update_weights(floatWeights, weightToChange, bitToChange):
@@ -119,7 +123,8 @@ with open('FaultListInjection.csv', 'w', newline='') as csvfile:
 
         # EXECUTING THE GOLD MODEL
         model.load_state_dict(weights)
-        outputGoldModel = model_execution()
+        outputGoldModel, topOneCorrectGold = model_execution()
+        outputGoldModelArr = map_to_array(outputGoldModel)
 
         # FOR EACH INJECTION
         for injection in spamreader:
@@ -139,18 +144,19 @@ with open('FaultListInjection.csv', 'w', newline='') as csvfile:
             model.load_state_dict(weights)
 
             # INFERENCES EXECUTION
-            outputModel = model_execution()
+            outputModel, topOneCorrect = model_execution()
 
-            injectionOutputResults = calculate_output_row(outputGoldModel, outputModel)
+            topOneRobust = calculate_top_one_robust(outputGoldModel, outputModel)
+
+            masked, nonCritical, critical = calculate_metrics(outputGoldModelArr, outputModel)
 
             spamwriter.writerow([injectionNumber] + [layerInjected] + [weightToChange] + [bitToChange]
-                                + [injectionOutputResults[0]] + [injectionOutputResults[1]] + [injectionOutputResults[2]]
-                                + [injectionOutputResults[3]] + [injectionOutputResults[4]])
+                                + [topOneCorrect] + [topOneRobust] + [masked]
+                                + [nonCritical] + [critical])
 
             # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS -- do xor again
             with torch.no_grad():
                 weights[layerInjected] = copyWeights
-
 
 # masked tutto uguale
 # non_critical top1 uguale, ma il resto del vettore diverso
