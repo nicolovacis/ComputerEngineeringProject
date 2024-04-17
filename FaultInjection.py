@@ -1,67 +1,103 @@
-# CHECK integerWeights[weightToChange]
 import csv
+import re
 import torch
+import torch.nn as nn
+import torchvision
 
-loader = torch.utils.data.DataLoader(transformed_dataset, batch_size=32, shuffle=False, num_workers=8,
-                                     pin_memory=True)
+
+# START SETTING
+class TransformedDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset, transform=None):
+        super().__init__()
+        # Wrapped dataset
+        self.dataset = dataset
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        image, label = self.dataset[idx]
+        if self.transform:
+            image = self.transform(image)
+        return image, label
 
 
+DATASET_PATH = 'downloaded_datasets/oxford_iiit_pet'
+
+dataset = torchvision.datasets.OxfordIIITPet(DATASET_PATH, split='test', download=True)
+
+n_classes = len(dataset.classes)
+
+model = torchvision.models.vit_b_16()
+
+image_width = 224
+image_height = 224
+
+model_input_size = (3, image_width, image_height)
+model.heads.head = nn.Linear(in_features=768, out_features=n_classes, bias=True)
+
+transform = torchvision.models.ViT_B_16_Weights.IMAGENET1K_V1.transforms()
+
+transformed_dataset = TransformedDataset(dataset, transform=transform)
+
+loader = torch.utils.data.DataLoader(transformed_dataset, batch_size=32, shuffle=False, num_workers=8, pin_memory=True)
+
+model.eval()
+
+model.to(device)
+
+totalInjections = 10000
+
+WEIGHTS_PATH = '/content/drive/MyDrive/Colab Notebooks/vit_iiipet_train_best.pth'
+
+weights = torch.load(WEIGHTS_PATH)['model'].state_dict()
+
+
+# END SETTING
 def generate_output_model(classesAccuracy):
-    output = {}
-    maxAccuracy = 0
-    maxClassName = None
+    outputModel = {}
 
-    # Calculate the accuracy for each class and insert into the linked list
+    # CALCULATING FOR EACH CLASS THE ACCURACY AND INSERTING IT INTO THE HASHMAP
     for className, result in classesAccuracy.items():
         classAccuracy = result[1] / result[0]
-        if classAccuracy >= maxAccuracy:
-            maxAccuracy = classAccuracy
-            maxClassName = className
+        outputModel[className] = classAccuracy
 
-        output[className] = classAccuracy
-
-    return output, maxClassName
+    return outputModel
 
 
 def model_execution():
     with torch.no_grad():
-        total_count = 0
-        accurate_count = 0
-        classesAccuracy = {
-            "cane": [1, 1]
-        }
-        # outputTensors = [] -> nel caso volessimo salvare per ogni inferenza l'output delle predictions
+        classesAccuracy = {}
+
         for images, labels in loader:
-            images = images.to(device)  # Size (batch_size=32, 3, 224, 224)
-            labels = labels.to(device)  # Size (batch_size=32, 1)
+            images = images.to(device)
+            labels = labels.to(device)
 
-            # Execute the prediction for batch_size=32 images
-            predictions = model(images)  # Size (batch_size=32,n_classes=37)
+            # EXECUTE THE PREDICTION
+            predictions = model(images)
 
-            pred_classes = predictions.argmax(axis=1)  # Size (batch_size=32,1)
-            # outputTensors.append(pred_classes) -> nel caso volessimo salvare per ogni inferenza l'output delle predictions
+            pred_classes = predictions.argmax(axis=1)
 
-            accurate_predictions = pred_classes == labels  # Size (batch_size=32,1) of booleans
+            accurate_predictions = pred_classes == labels
 
-            # calculating accuracy for each class
-
+            # CALCULATING TOTAL_IMAGES AND NUMBER OF CORRECT PREDICTIONS FOR EACH CLASS
             for index, resultPrediction in enumerate(accurate_predictions):
 
                 className = dataset.classes[labels[index]]
 
                 if className in classesAccuracy:
                     if resultPrediction:
-                        classesAccuracy[className] = [classesAccuracy[className][0],
-                                                      classesAccuracy[className][0][1] + 1]
+                        classesAccuracy[className] = [classesAccuracy[className][0], classesAccuracy[className][1] + 1]
                 else:
                     if resultPrediction:
                         classesAccuracy[className] = [1, 1]
                     else:
                         classesAccuracy[className] = [1, 0]
 
-        outputModelAccuracy, topOneCorrect = generate_output_model(classesAccuracy)
+        outputModelAccuracy = generate_output_model(classesAccuracy)
 
-        return outputModelAccuracy, topOneCorrect
+        return outputModelAccuracy
 
 
 def map_to_array(classesAccuracy):
@@ -75,7 +111,7 @@ def map_to_array(classesAccuracy):
 
 
 def calculate_top_one_robust(outputGoldModel, outputModel):
-    minVariation = int("inf")
+    minVariation = float("inf")
     topOneRobustClass = None
 
     for className in outputGoldModel.keys():
@@ -90,50 +126,48 @@ def calculate_top_one_robust(outputGoldModel, outputModel):
 
 def calculate_metrics(outputGoldModelArr, outputModel):
     outputModelArr = map_to_array(outputModel)
+    topOneCorrect = outputModelArr[0]
 
     if outputGoldModelArr == outputModelArr:
-        return 1, 0, 0
+        return topOneCorrect, 1, 0, 0
 
     if outputGoldModelArr[0] == outputModelArr[0]:
-        return 0, 1, 0
+        return topOneCorrect, 0, 1, 0
 
-    return 0, 0, 1
+    return topOneCorrect, 0, 0, 1
 
 
 def update_weights(floatWeights, weightToChange, bitToChange):
     integerWeights = floatWeights.view(torch.int32)
 
-    bit = 1 << bitToChange  # x << y insert x followed by y times 0
-    integerWeights[weightToChange] ^= bit  # sum bit to the previous number
-    # to flip back xor again with the same bit
+    # x << y INSERT x FOLLOWERD BY y TIMES 0
+    bit = 1 << bitToChange
+    integerWeights[weightToChange] ^= bit
 
     updatedWeights = integerWeights.view(torch.float32)
 
     return updatedWeights
 
 
-WEIGHTS_PATH = 'vit_iiipet_train_best.pth'
-weights = torch.load(WEIGHTS_PATH)['model'].state_dict()
-
 with open('FaultListInjection.csv', 'w', newline='') as csvfile:
     spamwriter = csv.writer(csvfile, delimiter=',', quotechar=' ', quoting=csv.QUOTE_MINIMAL)
 
-    with open('FaultList.csv', newline='') as csvfile:
+    with open('/content/drive/MyDrive/Colab Notebooks/fl.csv', newline='') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=',', quotechar=' ')
 
         # EXECUTING THE GOLD MODEL
         model.load_state_dict(weights)
-        outputGoldModel, topOneCorrectGold = model_execution()
+        outputGoldModel = model_execution()
         outputGoldModelArr = map_to_array(outputGoldModel)
 
         # FOR EACH INJECTION
         for injection in spamreader:
             injectionNumber = injection[0]
-            layerInjected = injection[1] + ".weight"
-            weightToChange = injection[2]
-            bitToChange = injection[3]
+            layerInjected = injection[1]
+            weightToChangeStr = injection[2]
+            weightToChange = list(map(int, re.split(r'\s+', weightToChangeStr.strip())))
+            bitToChange = int(injection[3])
             convWeights = weights.get(layerInjected)
-            copyWeights = convWeights.clone()  # COPY OF THE ORIGINAL TENSOR ASSOCIATED TO layerInjected
 
             faultInjectedWeights = update_weights(convWeights, weightToChange, bitToChange)
 
@@ -143,22 +177,20 @@ with open('FaultListInjection.csv', 'w', newline='') as csvfile:
 
             model.load_state_dict(weights)
 
-            # INFERENCES EXECUTION
-            outputModel, topOneCorrect = model_execution()
+            # INJECTED MODEL EXECUTION
+            outputModel = model_execution()
 
+            # METRICS CALCULATION
             topOneRobust = calculate_top_one_robust(outputGoldModel, outputModel)
 
-            masked, nonCritical, critical = calculate_metrics(outputGoldModelArr, outputModel)
+            topOneCorrect, masked, nonCritical, critical = calculate_metrics(outputGoldModelArr, outputModel)
 
-            spamwriter.writerow([injectionNumber] + [layerInjected] + [weightToChange] + [bitToChange]
+            # WRITING THE RESULT FOR THE Nth INJECTION
+            spamwriter.writerow([injectionNumber] + [layerInjected] + [weightToChangeStr] + [bitToChange]
                                 + [topOneCorrect] + [topOneRobust] + [masked]
                                 + [nonCritical] + [critical])
 
-            # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS -- do xor again
+            # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS
+            originalWeights = update_weights(convWeights, weightToChange, bitToChange)
             with torch.no_grad():
-                weights[layerInjected] = copyWeights
-
-# masked tutto uguale
-# non_critical top1 uguale, ma il resto del vettore diverso
-# critical top 1 cambia
-# file con num inienzioni, top1correct, top1 robust, masked, non critical, critical
+                weights[layerInjected] = originalWeights
