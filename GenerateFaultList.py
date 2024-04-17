@@ -1,10 +1,13 @@
 import csv
 import random
 import math
+import torch
 from functools import reduce
 
 totalInjections = 10000
-weights = {}
+WEIGHTS_PATH = '/content/drive/MyDrive/Colab Notebooks/vit_iiipet_train_best.pth'
+
+weights = torch.load(WEIGHTS_PATH)['model'].state_dict()
 
 
 def calc_total_weights(dictWeights):
