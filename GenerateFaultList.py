@@ -46,7 +46,6 @@ with open('FaultList.csv', 'w', newline='') as csvfile:
 
             # GETTING HOW MANY INJECTIONS SHOULD I DO ON THE CURRENT LAYER
             numLayerInjections = math.ceil((result / totalWeights) * totalInjections)
-            print(numLayerInjections)
 
             for currentNumLayerInjection in range(numLayerInjections):
                 rowTensorList = []

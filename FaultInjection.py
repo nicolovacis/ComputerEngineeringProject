@@ -140,9 +140,11 @@ def calculate_metrics(outputGoldModelArr, outputModel):
 def update_weights(floatWeights, weightToChange, bitToChange):
     integerWeights = floatWeights.view(torch.int32)
 
+    indices = tuple(weightToChange)
+
     # x << y INSERT x FOLLOWERD BY y TIMES 0
     bit = 1 << bitToChange
-    integerWeights[weightToChange] ^= bit
+    integerWeights[indices] ^= bit
 
     updatedWeights = integerWeights.view(torch.float32)
 
