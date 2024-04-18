@@ -3,7 +3,7 @@ import re
 import torch
 import torch.nn as nn
 import torchvision
-
+from tqdm import tqdm
 
 # START SETTING
 class TransformedDataset(torch.utils.data.Dataset):
@@ -157,13 +157,17 @@ with open('FaultListInjection.csv', 'w', newline='') as csvfile:
     with open('/content/drive/MyDrive/Colab Notebooks/fl.csv', newline='') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=',', quotechar=' ')
 
+        total_rows = sum(1 for row in spamreader)
+        csvfile.seek(0)
+        loader_progress_bar = tqdm(spamreader, total=total_rows, desc='Evaluating', colour='green')
+
         # EXECUTING THE GOLD MODEL
         model.load_state_dict(weights)
         output_gold_model = model_execution()
         output_gold_model_arr = map_to_array(output_gold_model)
 
         # FOR EACH INJECTION
-        for injection in spamreader:
+        for injection in loader_progress_bar:
             injection_number = injection[0]
             layer_injected = injection[1]
             weight_to_change_str = injection[2]
