@@ -4,10 +4,7 @@ import math
 import torch
 from functools import reduce
 
-total_injections = 10000
-WEIGHTS_PATH = '/content/drive/MyDrive/Colab Notebooks/vit_iiipet_train_best.pth'
 
-weights = torch.load(WEIGHTS_PATH)['model'].state_dict()
 
 
 def calc_total_weights(dict_weights):
@@ -27,37 +24,53 @@ def calc_total_weights(dict_weights):
     return weights_number
 
 
-total_weights = calc_total_weights(weights)
 
-with open('FaultList.csv', 'w', newline='') as csvfile:
-    spamwriter = csv.writer(csvfile, delimiter=',',
-                            quotechar=' ', quoting=csv.QUOTE_MINIMAL)
+def main():
+    # Paramterizzate
 
-    global_injection_counter = 0
+    # Nome file output
+    # Total injections
 
-    for layer in weights.keys():
+    total_injections = 10000
+    WEIGHTS_PATH = 'weights/vit_iiipet_train_best.pth'
 
-        if layer.endswith(".weight"):
-            tensor_weights = weights.get(layer)
-            tensor_weights_size_list = list(tensor_weights.size())
+    weights = torch.load(WEIGHTS_PATH)['model'].state_dict()
+    total_weights = calc_total_weights(weights)
 
-            # MULTIPLYING THE ELEMENTS OF THE SIZE LIST
-            result = reduce(lambda x, y: x * y, tensor_weights_size_list)
+    with open('FaultList.csv', 'w', newline='') as csvfile:
+        spamwriter = csv.writer(csvfile, delimiter=',',
+                                quotechar=' ', quoting=csv.QUOTE_MINIMAL)
 
-            # GETTING HOW MANY INJECTIONS SHOULD I DO ON THE CURRENT LAYER
-            num_layer_injections = math.ceil((result / total_weights) * total_injections)
+        global_injection_counter = 0
 
-            for current_num_layer_injection in range(num_layer_injections):
-                row_tensor_list = []
+        for layer in weights.keys():
 
-                for tensorDim in tensor_weights_size_list:
-                    x = random.randint(0, tensorDim - 1)
-                    row_tensor_list.append(x)
+            if layer.endswith(".weight"):
+                tensor_weights = weights.get(layer)
+                tensor_weights_size_list = list(tensor_weights.size())
 
-                bit = random.randint(0, 31)
-                # CONVERTING THE LIST INTO A STRING
-                row_tensor_list_str = ' '.join(map(str, row_tensor_list))
+                # MULTIPLYING THE ELEMENTS OF THE SIZE LIST
+                result = reduce(lambda x, y: x * y, tensor_weights_size_list)
 
-                # WRITING A NEW ROW IN THE FAULT_LIST CSV FILE
-                spamwriter.writerow([global_injection_counter] + [layer] + [row_tensor_list_str] + [bit])
-                global_injection_counter += 1
+                # GETTING HOW MANY INJECTIONS SHOULD I DO ON THE CURRENT LAYER
+                num_layer_injections = math.ceil((result / total_weights) * total_injections)
+
+                for current_num_layer_injection in range(num_layer_injections):
+                    row_tensor_list = []
+
+                    for tensorDim in tensor_weights_size_list:
+                        x = random.randint(0, tensorDim - 1)
+                        row_tensor_list.append(x)
+
+                    bit = random.randint(0, 31)
+                    # CONVERTING THE LIST INTO A STRING
+                    row_tensor_list_str = ' '.join(map(str, row_tensor_list))
+
+                    # WRITING A NEW ROW IN THE FAULT_LIST CSV FILE
+                    spamwriter.writerow([global_injection_counter] + [layer] + [row_tensor_list_str] + [bit])
+                    global_injection_counter += 1
+
+
+
+if __name__ == '__main__':
+    main()
