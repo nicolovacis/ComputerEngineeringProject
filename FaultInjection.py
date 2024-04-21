@@ -49,7 +49,7 @@ model.eval()
 
 model.to(device)
 
-WEIGHTS_PATH = '/content/drive/MyDrive/Colab Notebooks/vit_iiipet_train_best.pth'
+WEIGHTS_PATH = 'weights/vit_iiipet_best.pth'
 
 weights = torch.load(WEIGHTS_PATH)['model'].state_dict()
 
@@ -154,7 +154,7 @@ def update_weights(float_weights, weight_to_change, bit_to_change):
 with open('FaultListInjection.csv', 'w', newline='') as csvfile:
     spamwriter = csv.writer(csvfile, delimiter=',', quotechar=' ', quoting=csv.QUOTE_MINIMAL)
 
-    with open('/content/drive/MyDrive/Colab Notebooks/fl.csv', newline='') as csvfile:
+    with open('FaultList.csv', newline='') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=',', quotechar=' ')
 
         total_rows = sum(1 for row in spamreader)
