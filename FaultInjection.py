@@ -1,11 +1,12 @@
 import csv
+import argparse
 import re
 import torch
 import torch.nn as nn
 import torchvision
 from tqdm import tqdm
 
-# START SETTING
+
 class TransformedDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, transform=None):
         super().__init__()
@@ -23,38 +24,6 @@ class TransformedDataset(torch.utils.data.Dataset):
         return image, label
 
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-DATASET_PATH = 'downloaded_datasets/oxford_iiit_pet'
-
-dataset = torchvision.datasets.OxfordIIITPet(DATASET_PATH, split='test', download=True)
-
-n_classes = len(dataset.classes)
-
-model = torchvision.models.vit_b_16()
-
-image_width = 224
-image_height = 224
-
-model_input_size = (3, image_width, image_height)
-model.heads.head = nn.Linear(in_features=768, out_features=n_classes, bias=True)
-
-transform = torchvision.models.ViT_B_16_Weights.IMAGENET1K_V1.transforms()
-
-transformed_dataset = TransformedDataset(dataset, transform=transform)
-
-loader = torch.utils.data.DataLoader(transformed_dataset, batch_size=32, shuffle=False, num_workers=8, pin_memory=True)
-
-model.eval()
-
-model.to(device)
-
-WEIGHTS_PATH = 'weights/vit_iiipet_best.pth'
-
-weights = torch.load(WEIGHTS_PATH)['model'].state_dict()
-
-
-# END SETTING
 def generate_output_model(classes_accuracy):
     output_model = {}
 
@@ -66,7 +35,7 @@ def generate_output_model(classes_accuracy):
     return output_model
 
 
-def model_execution():
+def model_execution(device, dataset, model, loader):
     with torch.no_grad():
         classes_accuracy = {}
 
@@ -81,19 +50,24 @@ def model_execution():
 
             accurate_predictions = pred_classes == labels
 
+            index = 0
+
             # CALCULATING TOTAL_IMAGES AND NUMBER OF CORRECT PREDICTIONS FOR EACH CLASS
-            for index, result_prediction in enumerate(accurate_predictions):
+            for result_prediction in accurate_predictions:
 
                 class_name = dataset.classes[labels[index]]
 
                 if class_name in classes_accuracy:
                     if result_prediction:
-                        classes_accuracy[class_name] = [classes_accuracy[class_name][0], classes_accuracy[class_name][1] + 1]
+                        classes_accuracy[class_name] = [classes_accuracy[class_name][0],
+                                                        classes_accuracy[class_name][1] + 1]
                 else:
                     if result_prediction:
                         classes_accuracy[class_name] = [1, 1]
                     else:
                         classes_accuracy[class_name] = [1, 0]
+
+                index += 1
 
         output_model_accuracy = generate_output_model(classes_accuracy)
 
@@ -151,52 +125,99 @@ def update_weights(float_weights, weight_to_change, bit_to_change):
     return updated_weights
 
 
-with open('FaultListInjection.csv', 'w', newline='') as csvfile:
-    spamwriter = csv.writer(csvfile, delimiter=',', quotechar=' ', quoting=csv.QUOTE_MINIMAL)
+def main():
+    parser = argparse.ArgumentParser(
+        prog='GenerateFaultList',
+        description='Script that generates a fault list',
+    )
 
-    with open('FaultList.csv', newline='') as csvfile:
-        spamreader = csv.reader(csvfile, delimiter=',', quotechar=' ')
+    parser.add_argument('--dataset_percentage', type=int, required=True)
+    parser.add_argument('--weights_path', type=str, required=True)
+    parser.add_argument('--dataset_path', type=str, required=True)
+    parser.add_argument('--csv_input_path', type=str, required=True)
+    parser.add_argument('--csv_output_path', type=str, required=True)
 
-        total_rows = sum(1 for row in spamreader)
-        csvfile.seek(0)
-        loader_progress_bar = tqdm(spamreader, total=total_rows, desc='Evaluating', colour='green')
+    args = parser.parse_args()
 
-        # EXECUTING THE GOLD MODEL
-        model.load_state_dict(weights)
-        output_gold_model = model_execution()
-        output_gold_model_arr = map_to_array(output_gold_model)
+    # GETTING THE PARAMETERS FROM CLI
+    dataset_percentage = args.dataset_percentage
+    DATASET_PATH = args.dataset_path
+    WEIGHTS_PATH = args.weights_path
+    csv_input_path = args.csv_input_path
+    csv_output_path = args.csv_output_path
 
-        # FOR EACH INJECTION
-        for injection in loader_progress_bar:
-            injection_number = injection[0]
-            layer_injected = injection[1]
-            weight_to_change_str = injection[2]
-            weight_to_change = list(map(int, re.split(r'\s+', weight_to_change_str.strip())))
-            bit_to_change = int(injection[3])
-            conv_weights = weights.get(layer_injected)
+    # INITIALIZATION
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-            fault_injected_weights = update_weights(conv_weights, weight_to_change, bit_to_change)
+    dataset = torchvision.datasets.OxfordIIITPet(DATASET_PATH, split='test', download=True)
+    n_classes = len(dataset.classes)
 
-            with torch.no_grad():
-                conv_weights.copy_(fault_injected_weights)
-                weights[layer_injected] = conv_weights
+    model = torchvision.models.vit_b_16()
 
+    model.heads.head = nn.Linear(in_features=768, out_features=n_classes, bias=True)
+
+    transform = torchvision.models.ViT_B_16_Weights.IMAGENET1K_V1.transforms()
+
+    transformed_dataset = TransformedDataset(dataset, transform=transform)
+
+    loader = torch.utils.data.DataLoader(transformed_dataset, batch_size=32, shuffle=False, num_workers=8,
+                                         pin_memory=True)
+
+    # SETTING THE MODEL TO EVALUATION MODE
+    model.eval()
+    model.to(device)
+
+    # LOADING THE WEIGHTS
+    weights = torch.load(WEIGHTS_PATH)['model'].state_dict()
+
+    with open(csv_output_path, 'w', newline='') as csvfile:
+        spamwriter = csv.writer(csvfile, delimiter=',', quotechar=' ', quoting=csv.QUOTE_MINIMAL)
+
+        with open(csv_input_path, newline='') as csvfile:
+            spamreader = csv.reader(csvfile, delimiter=',', quotechar=' ')
+
+            total_rows = sum(1 for row in spamreader)
+            csvfile.seek(0)
+            loader_progress_bar = tqdm(spamreader, total=total_rows, desc='Evaluating', colour='green')
+
+            # EXECUTING THE GOLD MODEL
             model.load_state_dict(weights)
+            output_gold_model = model_execution(device, dataset, model, loader)
+            output_gold_model_arr = map_to_array(output_gold_model)
 
-            # INJECTED MODEL EXECUTION
-            output_model = model_execution()
+            # FOR EACH INJECTION IN THE FAULT LIST
+            for injection in loader_progress_bar:
+                injection_number = injection[0]
+                layer_injected = injection[1]
+                weight_to_change_str = injection[2]
+                weight_to_change = list(map(int, re.split(r'\s+', weight_to_change_str.strip())))
+                bit_to_change = int(injection[3])
+                conv_weights = weights.get(layer_injected)
 
-            # METRICS CALCULATION
-            top_one_robust = calculate_top_one_robust(output_gold_model, output_model)
+                fault_injected_weights = update_weights(conv_weights, weight_to_change, bit_to_change)
+                with torch.no_grad():
+                    conv_weights.copy_(fault_injected_weights)
+                    weights[layer_injected] = conv_weights
 
-            top_one_correct, masked, non_critical, critical = calculate_metrics(output_gold_model_arr, output_model)
+                model.load_state_dict(weights)
 
-            # WRITING THE RESULT FOR THE Nth INJECTION
-            spamwriter.writerow([injection_number] + [layer_injected] + [weight_to_change_str] + [bit_to_change]
-                                + [top_one_correct] + [top_one_robust] + [masked]
-                                + [non_critical] + [critical])
+                # INJECTED MODEL EXECUTION
+                output_model = model_execution(device, dataset, model, loader)
 
-            # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS
-            original_weights = update_weights(conv_weights, weight_to_change, bit_to_change)
-            with torch.no_grad():
-                weights[layer_injected] = original_weights
+                # METRICS CALCULATION
+                top_one_robust = calculate_top_one_robust(output_gold_model, output_model)
+                top_one_correct, masked, non_critical, critical = calculate_metrics(output_gold_model_arr, output_model)
+
+                # WRITING THE RESULT FOR THE Nth INJECTION
+                spamwriter.writerow([injection_number] + [layer_injected] + [weight_to_change_str] + [bit_to_change]
+                                    + [top_one_correct] + [top_one_robust] + [masked]
+                                    + [non_critical] + [critical])
+
+                # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS
+                original_weights = update_weights(conv_weights, weight_to_change, bit_to_change)
+                with torch.no_grad():
+                    weights[layer_injected] = original_weights
+
+
+if __name__ == '__main__':
+    main()
