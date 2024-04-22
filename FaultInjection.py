@@ -190,7 +190,7 @@ def main():
     desired_size = math.ceil((dataset_percentage / 100) * dataset_len)
 
     # WRITING A NEW FILE ONLY IF IT DOESN'T ALREADY EXIST
-    if os.path.exists(numbers_selected_txt_path):
+    if not os.path.exists(numbers_selected_txt_path):
         write_numbers(numbers_selected_txt_path, dataset_len, desired_size)
 
     list_selected_numbers = read_numbers(numbers_selected_txt_path)
