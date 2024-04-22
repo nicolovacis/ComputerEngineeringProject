@@ -1,9 +1,12 @@
 import csv
 import argparse
+import math
+import os
 import re
 import torch
 import torch.nn as nn
 import torchvision
+import numpy
 from tqdm import tqdm
 
 
@@ -84,6 +87,26 @@ def map_to_array(classes_accuracy):
     return classes_sorted_arr
 
 
+def read_numbers(path_txt):
+    numbers = []
+
+    # OPENING FILE
+    with open(path_txt, 'r') as txtfile:
+        # Reading each line from the txt file
+        for row in txtfile:
+            numbers.append(int(row.strip()))
+
+    return numbers
+
+
+def write_numbers(txt_path, dataset_len, desired_size):
+    selected_dataset_images = numpy.random.choice(dataset_len, size=desired_size, replace=False)
+
+    with open(txt_path, 'w') as file:
+        for image in selected_dataset_images:
+            file.write(str(image) + '\n')
+
+
 def calculate_top_one_robust(output_gold_model, output_model):
     min_variation = float("inf")
     top_one_robust_class = None
@@ -136,10 +159,12 @@ def main():
     parser.add_argument('--dataset_path', type=str, required=True)
     parser.add_argument('--csv_input_path', type=str, required=True)
     parser.add_argument('--csv_output_path', type=str, required=True)
+    parser.add_argument('--numbers_selected_txt_path', type=str, required=True)
 
     args = parser.parse_args()
 
     # GETTING THE PARAMETERS FROM CLI
+    numbers_selected_txt_path = args.numbers_selected_txt_path
     dataset_percentage = args.dataset_percentage
     DATASET_PATH = args.dataset_path
     WEIGHTS_PATH = args.weights_path
@@ -160,8 +185,18 @@ def main():
 
     transformed_dataset = TransformedDataset(dataset, transform=transform)
 
+    dataset_len = len(transformed_dataset)
+
+    desired_size = math.ceil((dataset_percentage / 100) * dataset_len)
+
+    # WRITING A NEW FILE ONLY IF IT DOESN'T ALREADY EXIST
+    if os.path.exists(numbers_selected_txt_path):
+        write_numbers(numbers_selected_txt_path, dataset_len, desired_size)
+
+    list_selected_numbers = read_numbers(numbers_selected_txt_path)
+
     loader = torch.utils.data.DataLoader(transformed_dataset, batch_size=32, shuffle=False, num_workers=8,
-                                         pin_memory=True)
+                                         pin_memory=True, sampler=list_selected_numbers)
 
     # SETTING THE MODEL TO EVALUATION MODE
     model.eval()
@@ -192,6 +227,7 @@ def main():
                 weight_to_change_str = injection[2]
                 weight_to_change = list(map(int, re.split(r'\s+', weight_to_change_str.strip())))
                 bit_to_change = int(injection[3])
+
                 conv_weights = weights.get(layer_injected)
 
                 fault_injected_weights = update_weights(conv_weights, weight_to_change, bit_to_change)
