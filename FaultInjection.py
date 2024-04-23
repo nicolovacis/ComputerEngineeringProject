@@ -27,20 +27,10 @@ class TransformedDataset(torch.utils.data.Dataset):
         return image, label
 
 
-def generate_output_model(classes_accuracy):
-    output_model = {}
-
-    # CALCULATING FOR EACH CLASS THE ACCURACY AND INSERTING IT INTO THE HASHMAP
-    for class_name, result in classes_accuracy.items():
-        class_accuracy = result[1] / result[0]
-        output_model[class_name] = class_accuracy
-
-    return output_model
-
-
-def model_execution(device, dataset, model, loader):
+def model_execution(device, model, loader):
     with torch.no_grad():
-        classes_accuracy = {}
+        counter_top_one_correct = 0
+        outputPredictions = []
 
         for images, labels in loader:
             images = images.to(device)
@@ -49,42 +39,15 @@ def model_execution(device, dataset, model, loader):
             # EXECUTE THE PREDICTION
             predictions = model(images)
 
+            outputPredictions.append(predictions)
+
             pred_classes = predictions.argmax(axis=1)
 
             accurate_predictions = pred_classes == labels
 
-            index = 0
+            counter_top_one_correct += accurate_predictions.sum().item()
 
-            # CALCULATING TOTAL_IMAGES AND NUMBER OF CORRECT PREDICTIONS FOR EACH CLASS
-            for result_prediction in accurate_predictions:
-
-                class_name = dataset.classes[labels[index]]
-
-                if class_name in classes_accuracy:
-                    if result_prediction:
-                        classes_accuracy[class_name] = [classes_accuracy[class_name][0],
-                                                        classes_accuracy[class_name][1] + 1]
-                else:
-                    if result_prediction:
-                        classes_accuracy[class_name] = [1, 1]
-                    else:
-                        classes_accuracy[class_name] = [1, 0]
-
-                index += 1
-
-        output_model_accuracy = generate_output_model(classes_accuracy)
-
-        return output_model_accuracy
-
-
-def map_to_array(classes_accuracy):
-    classes_accuracy_arr = [(class_name, accuracy) for class_name, accuracy in classes_accuracy.items()]
-
-    classes_sorted_accuracy_arr = sorted(classes_accuracy_arr, key=lambda x: x[1], reverse=True)
-
-    classes_sorted_arr = [item[0] for item in classes_sorted_accuracy_arr]
-
-    return classes_sorted_arr
+        return outputPredictions, counter_top_one_correct
 
 
 def read_numbers(path_txt):
@@ -107,31 +70,33 @@ def write_numbers(txt_path, dataset_len, desired_size):
             file.write(str(image) + '\n')
 
 
-def calculate_top_one_robust(output_gold_model, output_model):
-    min_variation = float("inf")
-    top_one_robust_class = None
+def calculate_metrics(output_gold_model, output_model):
+    counter_masked = 0
+    counter_non_critical = 0
+    counter_critical = 0
 
-    for class_name in output_gold_model.keys():
-        variation = output_gold_model[class_name] - output_model[class_name]
+    for i in range(len(output_gold_model)):
+        gold_model_tensor = output_gold_model[i]
+        injected_model_tensor = output_model[i]
 
-        if variation < min_variation:
-            min_variation = variation
-            top_one_robust_class = class_name
+        for j in range(gold_model_tensor.shape[0]):
+            classes_probabilty_output_gold = gold_model_tensor[j, :]
+            classes_probabilty_output = injected_model_tensor[j, :]
 
-    return top_one_robust_class
+            # Perform element-wise comparison
+            is_masked = numpy.array_equal(classes_probabilty_output_gold, classes_probabilty_output)
 
+            if is_masked:
+                counter_masked += 1
+            else:
+                is_non_critical = classes_probabilty_output_gold.argmax() == classes_probabilty_output.argmax()
 
-def calculate_metrics(output_gold_model_arr, output_model):
-    output_model_arr = map_to_array(output_model)
-    top_one_correct = output_model_arr[0]
+                if is_non_critical:
+                    counter_non_critical += 1
+                else:
+                    counter_critical += 1
 
-    if output_gold_model_arr == output_model_arr:
-        return top_one_correct, 1, 0, 0
-
-    if output_gold_model_arr[0] == output_model_arr[0]:
-        return top_one_correct, 0, 1, 0
-
-    return top_one_correct, 0, 0, 1
+    return counter_masked, counter_non_critical, counter_critical
 
 
 def update_weights(float_weights, weight_to_change, bit_to_change):
@@ -217,8 +182,7 @@ def main():
 
             # EXECUTING THE GOLD MODEL
             model.load_state_dict(weights)
-            output_gold_model = model_execution(device, dataset, model, loader)
-            output_gold_model_arr = map_to_array(output_gold_model)
+            output_gold_model, _ = model_execution(device, model, loader)
 
             # FOR EACH INJECTION IN THE FAULT LIST
             for injection in loader_progress_bar:
@@ -238,16 +202,14 @@ def main():
                 model.load_state_dict(weights)
 
                 # INJECTED MODEL EXECUTION
-                output_model = model_execution(device, dataset, model, loader)
+                output_model, top_one_correct = model_execution(device, model, loader)
 
                 # METRICS CALCULATION
-                top_one_robust = calculate_top_one_robust(output_gold_model, output_model)
-                top_one_correct, masked, non_critical, critical = calculate_metrics(output_gold_model_arr, output_model)
+                masked, non_critical, critical = calculate_metrics(output_gold_model, output_model)
 
                 # WRITING THE RESULT FOR THE Nth INJECTION
-                spamwriter.writerow([injection_number] + [layer_injected] + [weight_to_change_str] + [bit_to_change]
-                                    + [top_one_correct] + [top_one_robust] + [masked]
-                                    + [non_critical] + [critical])
+                spamwriter.writerow([injection_number] + [layer_injected] + [weight_to_change_str] + [bit_to_change] +
+                                    [desired_size] + [top_one_correct] + [masked] + [non_critical] + [critical])
 
                 # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS
                 original_weights = update_weights(conv_weights, weight_to_change, bit_to_change)
