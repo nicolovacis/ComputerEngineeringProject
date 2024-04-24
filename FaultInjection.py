@@ -160,6 +160,8 @@ def main():
 
     list_selected_numbers = read_numbers(numbers_selected_txt_path)
 
+    sample_size = len(list_selected_numbers)
+
     loader = torch.utils.data.DataLoader(transformed_dataset, batch_size=32, shuffle=False, num_workers=8,
                                          pin_memory=True, sampler=list_selected_numbers)
 
@@ -183,6 +185,10 @@ def main():
             # EXECUTING THE GOLD MODEL
             model.load_state_dict(weights)
             output_gold_model, _ = model_execution(device, model, loader)
+
+            # WRITING THE RESULT FOR THE Nth INJECTION
+            header = ['inj_id', 'layer_injected', 'weight_coords', 'bit_to_change', 'desired_size', 'top_one_correct', 'masked', 'non_critical', 'critical']
+            spamwriter.writerow(header)
 
             # FOR EACH INJECTION IN THE FAULT LIST
             for injection in loader_progress_bar:
@@ -209,7 +215,7 @@ def main():
 
                 # WRITING THE RESULT FOR THE Nth INJECTION
                 spamwriter.writerow([injection_number] + [layer_injected] + [weight_to_change_str] + [bit_to_change] +
-                                    [desired_size] + [top_one_correct] + [masked] + [non_critical] + [critical])
+                                    [sample_size] + [top_one_correct] + [masked] + [non_critical] + [critical])
 
                 # ROLLING BACK TO THE ORIGINAL TENSOR IN ORDER TO AVOID MULTIPLE INJECTIONS
                 original_weights = update_weights(conv_weights, weight_to_change, bit_to_change)
