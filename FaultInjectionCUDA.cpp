@@ -7,6 +7,7 @@
 #include <cuda.h>
 #include <cudnn.h>
 #include <stdio.h>
+#include <string>
 
 
 #include <ctime>
@@ -382,8 +383,6 @@ int performConvolutions(
   return 0;
 }
 
-#include <string>
-
 std::string algorithmIdToName(int id) {
     switch(id) {
         case 0:
@@ -409,17 +408,19 @@ std::string algorithmIdToName(int id) {
 
 
 //TODO CHECK IF FLOAT * IS CORRECT
-void injectFault(float * convWeights, int * convWeightsShape, int n, int c, int h, int w, int bitPos){
+void injectFault(float ** convWeights, int * convWeightsShape, int n, int c, int h, int w, int bitPos){
 	int linearIndex;
-	int bit;
+	int bit, intValue;
 
-	linearIndex = w + convWeightsShape[3] * (h + convWeightsShape[2] * (c + convWeightsShape[1] * k);
+	linearIndex = w + convWeightsShape[3] * (h + convWeightsShape[2] * (c + convWeightsShape[1] * n));
 
-	bit = 1 << bit_to_change;
-	convWeights[linearIndex] ^= bit;
+	bit = 1 << bitPos;
+  intValue = (int)convWeights[linearIndex];
+  intValue ^= bit;
+  convWeights[linearIndex] = (float)intValue;
 }
 
-float maxN(float *convOutput, int size) {
+float maxVal(float *convOutput, int size) {
     float maxVal = convOutput[0];
     int i;
 
@@ -432,7 +433,7 @@ float maxN(float *convOutput, int size) {
     return maxVal;
 }
 
-float minN(float *convOutput, int size) {
+float minVal(float *convOutput, int size) {
     float minVal = convOutput[0];
     int i;
 
@@ -500,8 +501,8 @@ void calculateMetrics(FILE* outputFile, int injectionId, int * validConvolutionI
             std::string secondAlgorithmName = algorithmIdToName(validConvolutionIds[j]);
 
             fprintf(outputFile, "%s, %s, %d, %f, %f, %f, %f, %f, %f",
-            					firstAlgorithmName,
-            					secondAlgorithmName,
+            					firstAlgorithmName.c_str(),
+            					secondAlgorithmName.c_str(),
             					injectionId,
 								rootMediumSqErr,
 								maxRelErr,
@@ -583,7 +584,7 @@ int main(int argc, char **argv) {
   int bitPos;
   int num_injections = 5;
 
-  FILE *fileInput = fopen("FaultList.csv", "r");
+  FILE *fileInput = fopen("faultList.csv", "r");
   if (fileInput == NULL) {
       perror("Failed to open the cvs fault_list file");
       return EXIT_FAILURE;
