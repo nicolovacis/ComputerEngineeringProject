@@ -3,7 +3,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <vector>
-
+#include <cmath>
 #include <cuda.h>
 #include <cudnn.h>
 #include <stdio.h>
@@ -382,8 +382,34 @@ int performConvolutions(
   return 0;
 }
 
-//TODO CHECK IF FLOAT * CONST IS CORRECT
-void injectFault(float * const convWeights, const int * const convWeightsShape, int n, int c, int h, int w, int bitPos){
+#include <string>
+
+std::string algorithmIdToName(int id) {
+    switch(id) {
+        case 0:
+            return "IMPLICIT_GEMM";
+        case 1:
+            return "IMPLICIT_PRECOMP_GEMM";
+        case 2:
+            return "GEMM";
+        case 3:
+            return "DIRECT";
+        case 4:
+            return "FFT";
+        case 5:
+            return "FFT_TILING";
+        case 6:
+            return "WINOGRAD";
+        case 7:
+            return "WINOGRAD_NONFUSED";
+        default:
+            return "NOT AVAILABLE";
+    }
+}
+
+
+//TODO CHECK IF FLOAT * IS CORRECT
+void injectFault(float * convWeights, int * convWeightsShape, int n, int c, int h, int w, int bitPos){
 	int linearIndex;
 	int bit;
 
@@ -420,19 +446,44 @@ float minN(float *convOutput, int size) {
 }
 
 float calcRootMediumSqErr(float *convOutputFirstAlg, float *convOutputSecondAlg, int size){
+	int i;
+    float sumSquaredDiff, meanSquaredDiff, diff;
 
+    sumSquaredDiff = 0.0;
+
+    for (i = 0 ; i < size ; i++) {
+        diff = convOutputFirstAlg[i] - convOutputSecondAlg[i];
+        sumSquaredDiff += diff * diff;
+    }
+
+    meanSquaredDiff = sumSquaredDiff / size;
+
+    return sqrt(meanSquaredDiff);
 }
 
 float calcMaxRelErr(float *convOutputFirstAlg, float *convOutputSecondAlg, int size){
+	int i;
+	float maxRelErr, relativeError;
 
+    maxRelErr = 0.0;
+
+    for (i = 0 ; i < size ; i++) {
+        relativeError = fabs((convOutputFirstAlg[i] - convOutputSecondAlg[i]) / convOutputFirstAlg[i]);
+
+        if (relativeError > maxRelErr) {
+            maxRelErr = relativeError;
+        }
+    }
+
+    return maxRelErr;
 }
 
-void calculateMetrics(FILE* outputFile, int * validConvolutionIds, int validConvolutionsCount, float **convOutputs, int * convOutputShape){
+void calculateMetrics(FILE* outputFile, int injectionId, int * validConvolutionIds, int validConvolutionsCount, float **convOutputs, int * convOutputShape){
 	int i, j, tensorSize;
 	float maxFirstAlg, maxSecondAlg, minFirstAlg, minSecondAlg, rootMediumSqErr, maxRelErr;
 
 	for(i = 0 ; i < validConvolutionsCount ; i++){
-		for(j = 0 ; j < validConvolutionsCount ; j++){
+		for(j = i + 1 ; j < validConvolutionsCount ; j++){
 
 			//TODO CHECK IF THIS IS CORRECT
 			tensorSize = convOutputShape[0] * convOutputShape[1] * convOutputShape[2] * convOutputShape[3];
@@ -445,8 +496,19 @@ void calculateMetrics(FILE* outputFile, int * validConvolutionIds, int validConv
             rootMediumSqErr = calcRootMediumSqErr(convOutputs[i], convOutputs[j], tensorSize);
             maxRelErr = calcMaxRelErr(convOutputs[i], convOutputs[j], tensorSize);
 
+            std::string firstAlgorithmName = algorithmIdToName(validConvolutionIds[i]);
+            std::string secondAlgorithmName = algorithmIdToName(validConvolutionIds[j]);
 
-            fprintf(outputFile, "%f, %f, %f, %f, %f, %f", rootMediumSqErr, maxRelErr, maxFirstAlg, maxSecondAlg, minFirstAlg, minSecondAlg);
+            fprintf(outputFile, "%s, %s, %d, %f, %f, %f, %f, %f, %f",
+            					firstAlgorithmName,
+            					secondAlgorithmName,
+            					injectionId,
+								rootMediumSqErr,
+								maxRelErr,
+								maxFirstAlg,
+								maxSecondAlg,
+								minFirstAlg,
+								minSecondAlg);
 		}
 	}
 
@@ -557,7 +619,7 @@ int main(int argc, char **argv) {
     );
 
     // Calculating the metrics
-    calculateMetrics(validConvolutionIds, validConvolutionCount, convOutputs, convOutputShape);
+    calculateMetrics(fileOutput, injectionId, validConvolutionIds, validConvolutionCount, convOutputs, convOutputShape);
 
     // Injecting the fault
   	injectFault(&allTensors[tensorId * 2 + 1], shapes[tensorId * 2 + 1], n, c, h, w, bitPos);
