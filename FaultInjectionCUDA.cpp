@@ -1,4 +1,3 @@
-%%writefile template.cpp
 #include <iomanip>
 #include <iostream>
 #include <cstdlib>
@@ -8,8 +7,6 @@
 #include <cudnn.h>
 #include <stdio.h>
 #include <string>
-
-
 #include <ctime>
 
 
@@ -383,8 +380,9 @@ int performConvolutions(
   return 0;
 }
 
-std::string algorithmIdToName(int id) {
-    switch(id) {
+
+std::string algorithmIdToName(int algorithmId) {
+    switch(algorithmId) {
         case 0:
             return "IMPLICIT_GEMM";
         case 1:
@@ -402,84 +400,91 @@ std::string algorithmIdToName(int id) {
         case 7:
             return "WINOGRAD_NONFUSED";
         default:
-            return "NOT AVAILABLE";
+            return "ALGORITHM NOT AVAILABLE";
     }
 }
 
 
-//TODO CHECK IF FLOAT * IS CORRECT
-void injectFault(float * convWeights, int * convWeightsShape, int n, int c, int h, int w, int bitPos){
+void injectFault(float *convWeights, int *convWeightsShape, int n, int c, int h, int w, int bitPos){
 	int linearIndex;
 	int bit;
 
-
-	linearIndex = w + convWeightsShape[3] * (h + convWeightsShape[2] * (c + convWeightsShape[1] * n));
+    linearIndex = w + convWeightsShape[3] * (h + convWeightsShape[2] * (c + convWeightsShape[1] * n));
 
 	bit = 1 << bitPos;
-  std::cout << "Float Before Injection: " << convWeights[linearIndex] << std::endl;
-  int* intValuePtr = reinterpret_cast<int*>(&convWeights[linearIndex]);
-  std::cout << "Int Before Injection: " << intValuePtr << std::endl;
-  *intValuePtr ^= bit;
-  std::cout << "Int After Injection: " << intValuePtr << std::endl;
-  convWeights[linearIndex] = *reinterpret_cast<float*>(intValuePtr);
-  std::cout << "Float After Injection: " << convWeights[linearIndex] << std::endl;
+
+    int* intValuePtr = reinterpret_cast<int*>(&convWeights[linearIndex]);
+    *intValuePtr ^= bit;
+    convWeights[linearIndex] = *reinterpret_cast<float*>(intValuePtr);
 }
 
-float maxVal(float *convOutput, int size) {
-    float maxVal = convOutput[0];
-    int i;
+
+float maxVal(float *convOutput, int index, int size) {
+    int i, baseIndex;
+    float maxVal;
+
+    baseIndex = size * index;
+    maxVal = convOutput[baseIndex];
 
     for (i = 1 ; i < size ; i++) {
-        if (convOutput[i] > maxVal) {
-            maxVal = convOutput[i];
+        if (convOutput[baseIndex + i] > maxVal) {
+            maxVal = convOutput[baseIndex + i];
         }
     }
 
     return maxVal;
 }
 
-float minVal(float *convOutput, int size) {
-    float minVal = convOutput[0];
-    int i;
+
+float minVal(float *convOutput, int index, int size) {
+    int i, baseIndex;
+    float minVal;
+
+    baseIndex = size * index;
+    minVal = convOutput[baseIndex];
 
     for (i = 1 ; i < size ; i++) {
-        if (convOutput[i] < minVal) {
-            minVal = convOutput[i];
+        if (convOutput[baseIndex + i] < minVal) {
+            minVal = convOutput[baseIndex + i];
         }
     }
 
     return minVal;
 }
 
-float calcRootMediumSqErr(float *convOutputFirstAlg, float *convOutputSecondAlg, int size){
-	int i;
-  float sumSquaredDiff, meanSquaredDiff, diff;
 
-  sumSquaredDiff = 0.0;
+double calcRootMediumSqErr(float *convOutput, int indexFirstAlg, int indexSecondAlg, int size){
 
-  for (i = 0 ; i < size ; i++) {
-      if(i == 0){
-        std::cout << "OutputFirstAlg: " << convOutputFirstAlg[i] << std::endl;
-        std::cout << "OutputSecondAlg: " << convOutputSecondAlg[i] << std::endl;
-        std::cout << "Diff: " << convOutputFirstAlg[i] - convOutputSecondAlg[i] << std::endl;
-      }
-      diff = convOutputFirstAlg[i] - convOutputSecondAlg[i];
-      sumSquaredDiff += diff * diff;
-  }
+    int i, baseIndexFirstAlg, baseIndexSecondAlg;
+    double sumSquaredDiff, meanSquaredDiff, diff;
 
-  meanSquaredDiff = sumSquaredDiff / size;
+    baseIndexFirstAlg = size * indexFirstAlg;
+    baseIndexSecondAlg = size * indexSecondAlg;
 
-  return sqrt(meanSquaredDiff);
+    sumSquaredDiff = 0.0;
+
+    for (i = 0 ; i < size ; i++) {
+        diff = convOutput[baseIndexFirstAlg + i] - convOutput[baseIndexSecondAlg + i];
+        sumSquaredDiff += diff * diff;
+    }
+
+    meanSquaredDiff = sumSquaredDiff / size;
+
+    return sqrt(meanSquaredDiff);
 }
 
-float calcMaxRelErr(float *convOutputFirstAlg, float *convOutputSecondAlg, int size){
-	int i;
-	float maxRelErr, relativeError;
+
+double calcMaxRelErr(float *convOutput, int indexFirstAlg, int indexSecondAlg, int size){
+	int i, baseIndexFirstAlg, baseIndexSecondAlg;
+	double maxRelErr, relativeError;
+
+    baseIndexFirstAlg = size * indexFirstAlg;
+    baseIndexSecondAlg = size * indexSecondAlg;
 
     maxRelErr = 0.0;
 
     for (i = 0 ; i < size ; i++) {
-        relativeError = fabs((convOutputFirstAlg[i] - convOutputSecondAlg[i]) / convOutputFirstAlg[i]);
+        relativeError = fabs((convOutput[baseIndexFirstAlg + i] - convOutput[baseIndexSecondAlg + i]) / convOutput[baseIndexFirstAlg + i]);
 
         if (relativeError > maxRelErr) {
             maxRelErr = relativeError;
@@ -489,39 +494,39 @@ float calcMaxRelErr(float *convOutputFirstAlg, float *convOutputSecondAlg, int s
     return maxRelErr;
 }
 
-void calculateMetrics(FILE* outputFile, int injectionId, int * validConvolutionIds, int validConvolutionsCount, float **convOutputs, int * convOutputShape){
+
+void calculateMetrics(FILE* outputFile, int injectionId, int * validConvolutionIds, int validConvolutionsCount, float *convOutputs, int * convOutputShape){
 	int i, j, tensorSize;
-	float maxFirstAlg, maxSecondAlg, minFirstAlg, minSecondAlg, rootMediumSqErr, maxRelErr;
+	float maxFirstAlg, maxSecondAlg, minFirstAlg, minSecondAlg;
+    double rootMediumSqErr, maxRelErr;
 
 	for(i = 0 ; i < validConvolutionsCount ; i++){
 		for(j = i + 1 ; j < validConvolutionsCount ; j++){
 
-			//TODO CHECK IF THIS IS CORRECT
 			tensorSize = convOutputShape[0] * convOutputShape[1] * convOutputShape[2] * convOutputShape[3];
-      std::cout << "OutputSize: " << tensorSize << std::endl;
 
-			maxFirstAlg = maxVal(convOutputs[i], tensorSize);
-            maxSecondAlg = maxVal(convOutputs[j], tensorSize);
-            minFirstAlg = minVal(convOutputs[i], tensorSize);
-            minSecondAlg = minVal(convOutputs[j], tensorSize);
+            maxFirstAlg = maxVal(convOutputs, validConvolutionIds[i], tensorSize);
+            maxSecondAlg = maxVal(convOutputs, validConvolutionIds[j], tensorSize);
+            minFirstAlg = minVal(convOutputs, validConvolutionIds[i], tensorSize);
+            minSecondAlg = minVal(convOutputs, validConvolutionIds[j], tensorSize);
 
-            rootMediumSqErr = calcRootMediumSqErr(convOutputs[i], convOutputs[j], tensorSize);
-            maxRelErr = calcMaxRelErr(convOutputs[i], convOutputs[j], tensorSize);
+            rootMediumSqErr = calcRootMediumSqErr(convOutputs, validConvolutionIds[i], validConvolutionIds[j], tensorSize);
+            maxRelErr = calcMaxRelErr(convOutputs, validConvolutionIds[i], validConvolutionIds[j], tensorSize);
 
             std::string firstAlgorithmName = algorithmIdToName(validConvolutionIds[i]);
             std::string secondAlgorithmName = algorithmIdToName(validConvolutionIds[j]);
-            std::cout << injectionId << " " << firstAlgorithmName << " " << secondAlgorithmName << " " << maxFirstAlg
-                      << " " << rootMediumSqErr << " " << maxRelErr <<std::endl;
-            fprintf(outputFile, "%d, %s, %s, %f, %f, %f, %f, %f, %f, \n",
+            std::cout << injectionId << " " << firstAlgorithmName << " " << secondAlgorithmName << " " << rootMediumSqErr
+                    << " " << maxRelErr << " " << maxFirstAlg << " " << maxSecondAlg << " " << minFirstAlg << " "<< minSecondAlg << std::endl;
+            fprintf(outputFile, "%d,%s,%s,%lf,%lf,%f,%f,%f,%f\n",
                       injectionId,
-            					firstAlgorithmName.c_str(),
-            					secondAlgorithmName.c_str(),
-								rootMediumSqErr,
-								maxRelErr,
-								maxFirstAlg,
-								maxSecondAlg,
-								minFirstAlg,
-								minSecondAlg);
+                      firstAlgorithmName.c_str(),
+                      secondAlgorithmName.c_str(),
+                      rootMediumSqErr,
+                      maxRelErr,
+                      maxFirstAlg,
+                      maxSecondAlg,
+                      minFirstAlg,
+                      minSecondAlg);
 		}
 	}
 
@@ -579,22 +584,10 @@ int main(int argc, char **argv) {
   // Array for storing the ids of convolution that where valid
   int *validConvolutionIds = (int *) malloc(nAlgos * sizeof(int));
 
-  //inj_id,tensor_id,k,c,h,w,bit_pos
-  //PER OGNI INIEZIONE
-  //1) SALVO I DATI CHE LEGGO DALLA RIGA (FREAD)
-  //2) INIETTO IL GUASTO
-  //3) FACCIO LE CONVOLUZIONI
-  //4) CALCOLO LE METRICHE
-  //5) RIFACCIO LO XOR COL GUASTO PER EVITARE GUASTI MULTIPLI
-  //6) RILASCIO LA MEMORIA NELLO HEAP DEGLI OUTPUT
-  // DUBBIO: COME FACCIO A CAPIRE SE UNA CONVOLUZIONE E' VALIDA O NO?
-  // DUBBIO: PER OGNI FAULT INJECTION, DEVO FARE NUM_TENSORS/2 VOLTE CONVOLUZIONI O UNA PER INIEZIONE
-
   int injectionId;
   int tensorId;
   int n, c, h, w;
   int bitPos;
-  int num_injections = 5;
   int tmp;
 
   FILE *fileInput = fopen("faultList.csv", "r");
@@ -609,18 +602,25 @@ int main(int argc, char **argv) {
       return EXIT_FAILURE;
   }
 
+  // Header of the output csv
+  fprintf(fileOutput, "%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
+                "injectionId",
+                "firstAlgorithmName",
+                "secondAlgorithmName",
+                "rootMediumSqErr",
+                "maxRelErr",
+                "maxFirstAlg",
+                "maxSecondAlg",
+                "minFirstAlg",
+                "minSecondAlg");
+
   while ((tmp = fgetc(fileInput)) != EOF && tmp != '\n') {
-      // Ignoring the header of the csv
+      // Ignoring the header of the input csv
   }
 
-  for (int j = 0 ; j < num_injections ; j++){
+  // Iterating for every row in the csv input file
+  while (fscanf(fileInput, "%d,%d,%d,%d,%d,%d,%d", &injectionId, &tensorId, &n, &c, &h, &w, &bitPos) == 7){
 
-  	// Reading the row from the csv fault list
-  	fscanf(fileInput, "%d,%d,%d,%d,%d,%d,%d", &injectionId, &tensorId, &n, &c, &h, &w, &bitPos);
-    std::cout << j << " injectionId:  " << injectionId << std::endl;
-    std::cout << j << " tensordId: " << tensorId << std::endl;
-    std::cout << j << " n: " << n << std::endl;
-    std::cout << j << " c: " << c << std::endl;
   	// Injecting the fault
   	injectFault(allTensors[tensorId * 2 + 1], shapes[tensorId * 2 + 1], n, c, h, w, bitPos);
 
@@ -640,21 +640,19 @@ int main(int argc, char **argv) {
     );
 
     // Calculating the metrics
-    calculateMetrics(fileOutput, injectionId, validConvolutionIds, validConvolutionCount, &convOutputs, convOutputShape);
+    calculateMetrics(fileOutput, injectionId, validConvolutionIds, validConvolutionCount, convOutputs, convOutputShape);
 
     // Injecting the fault
   	injectFault(allTensors[tensorId * 2 + 1], shapes[tensorId * 2 + 1], n, c, h, w, bitPos);
 
     // Free resources allocated by performConvolutions (all the output tensors)
     free(convOutputs);
-
   }
 
   fclose(fileInput);
   fclose(fileOutput);
 
   // From here free all the resources
-
   for(int i = 0; i < num_tensors; i++) {
     free(allTensors[i]);
   }
@@ -663,6 +661,7 @@ int main(int argc, char **argv) {
   free(convOutputs);
   free(validConvolutionIds);
   // At the end always destroy cuddn handle
+
   CUDNN_CALL(cudnnDestroy(cudnn));
 
 }
