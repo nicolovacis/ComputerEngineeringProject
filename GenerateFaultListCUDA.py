@@ -35,7 +35,7 @@ def generateFaultList(file_input, file_output, inj_number):
         num_tensor = struct.unpack('<i', file.read(4))[0]
 
         # Number of inj for each tensor (approximated to the upper case)
-        single_inj_num = math.ceil(inj_number/num_tensor)
+        single_inj_num = math.ceil(inj_number/(num_tensor/2))
 
         # Open csv output file
         with open(file_output, 'w', newline='') as csvfile:
@@ -64,8 +64,6 @@ def generateFaultList(file_input, file_output, inj_number):
                     # Repeat single_inj_num injections
                     for inj_id in range(single_inj_num):
 
-                        global_injection_counter += 1
-
                         n = random.randint(0, n_dim - 1)
                         c = random.randint(0, c_dim - 1)
                         h = random.randint(0, h_dim - 1)
@@ -75,6 +73,8 @@ def generateFaultList(file_input, file_output, inj_number):
 
                         # Writing a new row in the csv file
                         spamwriter.writerow([global_injection_counter] + [tensor_id] + [n] + [c] + [h] + [w] + [bit_pos])
+
+                        global_injection_counter += 1
 
 
 # Example usage
