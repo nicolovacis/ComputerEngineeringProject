@@ -9,7 +9,7 @@ def nan_count(file_path, column_name):
     nan_counts = data.groupby([data['firstAlgorithmName'], data['secondAlgorithmName']])[column_name].apply(lambda x: x.isna().sum())
     nan_counts.plot(kind='bar', figsize=(10, 6), title='NaN Count in Column: {}'.format(column_name))
     plt.xlabel('Algorithm Names')
-    plt.ylabel('NaN Count')
+    plt.ylabel('Injection count where: '+column_name+' is Nan')
     plt.xticks(rotation=90)
     plt.show()
 
@@ -56,7 +56,7 @@ def nan_count_utils(injection_file, fault_file, column_groupby, column_shown, fi
         # Plot the graph
         nan_counts.plot(kind='bar', figsize=(10, 6), title='NaN Occurrences in Column: {}'.format(column_shown))
         plt.xlabel(column_groupby)
-        plt.ylabel('NaN Count')
+        plt.ylabel('Injection count where: '+column_groupby+' is Nan')
         plt.xticks(rotation=90)
         plt.show()
     else:
@@ -80,7 +80,7 @@ def nan_tensor_inside(injection_file, fault_file, column_shown):
         # Plot the graph
         nan_counts.plot(kind='bar', figsize=(10, 6), title='NaN Occurrences in Column: {}'.format(column_shown))
         plt.xlabel('tensor_id_inside')
-        plt.ylabel('NaN Count')
+        plt.ylabel('Injection count where: '+column_shown+' is Nan')
         plt.xticks(rotation=90)
         plt.show()
     else:
@@ -118,11 +118,11 @@ if __name__ == "__main__":
     fileFaultList = 'faultList.csv'
 
     nan_count(fileFaultInj, 'rootMediumSqErr')
-    average_err(fileFaultInj, 'rootMediumSqErr')
-    average_err(fileFaultInj, 'maxRelErr')
-    nan_on_injid(fileFaultInj, fileFaultList, 'rootMediumSqErr')
+    #average_err(fileFaultInj, 'rootMediumSqErr')
+    #average_err(fileFaultInj, 'maxRelErr')
+    #nan_on_injid(fileFaultInj, fileFaultList, 'rootMediumSqErr')
     nan_on_bitpos(fileFaultInj, fileFaultList, 'rootMediumSqErr')
-    nan_on_tensor(fileFaultInj, fileFaultList, 'rootMediumSqErr')
+    #nan_on_tensor(fileFaultInj, fileFaultList, 'rootMediumSqErr')
     nan_tensor_inside(fileFaultInj, fileFaultList, 'rootMediumSqErr')
 
     plot_max_rel_err_percentage(fileFaultInj)
