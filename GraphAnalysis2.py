@@ -87,6 +87,31 @@ def nan_tensor_inside(injection_file, fault_file, column_shown):
         print("No groups with NaN occurrences in column '{}'".format(column_shown))
 
 
+def plot_max_rel_err_percentage(injection_file):
+    # Read the CSV file
+    injection_data = pd.read_csv(injection_file)
+
+    # Count the total number of injections for each algorithm pair
+    total_injections = injection_data.groupby(['firstAlgorithmName', 'secondAlgorithmName']).size()
+
+    # Filter rows where maxRelErr is greater than 0.01
+    filtered_data = injection_data[injection_data['maxRelErr'] > 0.01]
+
+    # Count the number of injections with maxRelErr > 0.01 for each algorithm pair
+    error_injections = filtered_data.groupby(['firstAlgorithmName', 'secondAlgorithmName']).size()
+
+    # Calculate the percentage of injections with maxRelErr > 0.01
+    percentage_errors = (error_injections / total_injections * 100).fillna(0)
+
+    if not percentage_errors.empty:
+        # Plot the histogram
+        percentage_errors.plot(kind='bar', figsize=(10, 6), title='Percentage of Max Relative Error > 0.01 between Algorithm Pairs')
+        plt.xlabel('Algorithm Pairs')
+        plt.ylabel('Percentage (%)')
+        plt.xticks(rotation=90)
+        plt.show()
+    else:
+        print("No occurrences of Max Relative Error > 0.01 found between algorithm pairs")
 
 if __name__ == "__main__":
     fileFaultInj = 'FaultInjection.csv'
@@ -99,3 +124,5 @@ if __name__ == "__main__":
     nan_on_bitpos(fileFaultInj, fileFaultList, 'rootMediumSqErr')
     nan_on_tensor(fileFaultInj, fileFaultList, 'rootMediumSqErr')
     nan_tensor_inside(fileFaultInj, fileFaultList, 'rootMediumSqErr')
+
+    plot_max_rel_err_percentage(fileFaultInj)
