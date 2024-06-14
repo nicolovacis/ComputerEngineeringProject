@@ -75,8 +75,9 @@ python GenerateFaultList.py --injections_number <desired_number_of_injections> -
 
 ### FaultInjection
 This script representing the main executing environment, providing the output on a CSV file, given the following command line parameters:
-1. _csv_input_path_ -> the path of the fault list used
-2. _csv_output_path_ -> the path of the desired to save your generated fault list
+1. _bin_file_tensors_ -> the path of where the tensors are saved
+2. _csv_input_path_ -> the path of the fault list used
+3. _csv_output_path_ -> the path of the desired to save your generated fault list
 
 _name_executable_ is the desired name for the .exe file.
 First it is necessary to compile using the following command:
