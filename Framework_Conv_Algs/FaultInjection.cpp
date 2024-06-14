@@ -126,6 +126,41 @@ cudnnConvolutionFwdAlgo_t convolutionAlgorithms[] = {
     CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD_NONFUSED
 };
 
+
+/**
+ * @brief Performs all the cudnn listed convolutions for a fixed input and weight tensor.
+ ## Inputs
+ * @param cudnnHandle: A pointer to an already initialized cudnnHandle
+ * @param convolutionsAlgos: A pointer to an array containing the algorithms identifiers (of type cudnnConvolutionFwdAlgo_t) that should be attempted to be executed.
+ * @param nAlgos: The number of algorithms present in the array referenced by convolutionsAlgos.
+ * @param convInput: A pointer to a linear float array containing the input tensor data.
+ * @param convInputShape: A pointer to a four element int array containing the shape of the input tensor. Each of the four element represents the size of the tensor dimensions in the following order: N C H W.
+                          N is the batch size, C is the number of channels, H and W are respectively the height and the width of each channel.
+                          This function will read all the elements of the convInput tensor, namely the first N * C * H * W elements starting from the address contained in convInput.
+ * @param convWeights: A pointer to a linear float array containing the weight tensor data.
+ * @param convWeightsShape: A pointer to a four element int array containing the shape of the weight tensor. Each of the four element represents the size of the tensor dimensions in the following order: K C FH FW.
+                          K is the number of channels returned in output by the convolution, C is the number of input channels of the convolution (it MUST be equal to convInputShape's C), FH and FW are
+                          respectively the filter Height and Width.
+                          This function will read all the elements of the convInput tensor, namely the first K * C * FH * FW elements starting from the address contained in convWeights.
+ ## Outputs
+ * @param validConvolutionIds: A pointer to an allocated array that will contain after the execution of the function the ids of the convolution that were actually executed.
+                               This is due to the fact that some convolutions may not be supported by cudnn.
+                               The memory area allocated for this array must contain a number of integers equal to nAlgos, but it can contain less.
+ * @param validConvolutionsCount: The number of valid elements present in the validConvolutionIds array.
+ * @param convOutputs: A pointer to an array of pointers that will be allocated within the function. It will contain the results
+ *                     for each supported convolution operation. Each pointer in the array points to a contiguous block of memory
+ *                     holding the output data from the convolution in floating-point format. The number of elements in each block
+ *                     is determined by the output tensor dimensions. The number of valid pointers in the arrays is equal to validConvolutionsCount and the pointer
+                       at the i-th position of convOutputs points to the result of the convolution algorithm stored to validConvolutionsCount[i].
+ *                     The function handles the allocation of memory for each output block. The user is responsible for
+ *                     eventually freeing the memory area addressed by each pointer of the array of pointer (all nAlgos pointers must be freed regardless they contain a valid result or not).
+
+ * @param convOutputShape: A pointer to a 4 element int array that will contain, after the execution of the function, the NCHW shape of all output tensors. The shape is the same for every algorithm.
+                      Each tensor contained in convOutputs will have this shape.
+
+ *
+ * @return 0
+ */
 int performConvolutions(
   const cudnnHandle_t *cudnnHandle,
   const cudnnConvolutionFwdAlgo_t *convolutionsAlgos,
@@ -381,6 +416,12 @@ int performConvolutions(
 }
 
 
+/**
+ * Maps the algorithmId to its name
+ *
+ * @param algorithmId id of the algorithm
+ * @return The algorithm name associated to algorithmId
+ */
 std::string algorithmIdToName(int algorithmId) {
     switch(algorithmId) {
         case 0:
@@ -405,6 +446,19 @@ std::string algorithmIdToName(int algorithmId) {
 }
 
 
+/**
+ * @brief Injects a fault into a convolutional weight tensor.
+ *
+ * This function flips a specific bit in the convolutional weights tensor at a given position.
+ *
+ * @param convWeights Pointer to the convolutional weights tensor.
+ * @param convWeightsShape Pointer to the shape of the convolutional weights tensor.
+ * @param n Batch index.
+ * @param c Channel index.
+ * @param h Height index.
+ * @param w Width index.
+ * @param bitPos Bit position to flip.
+ */
 void injectFault(float *convWeights, int *convWeightsShape, int n, int c, int h, int w, int bitPos){
 	int linearIndex;
 	int bit;
@@ -419,6 +473,16 @@ void injectFault(float *convWeights, int *convWeightsShape, int n, int c, int h,
 }
 
 
+/**
+ * @brief Finds the maximum value in a subset of a convolutional output tensor.
+ *
+ * This function finds the maximum value within a specific region of a convolutional output tensor.
+ *
+ * @param convOutput Pointer to the convolutional output tensor.
+ * @param index Index of the subset to analyze.
+ * @param size Size of the subset to analyze.
+ * @return The maximum value within the specified subset.
+ */
 float maxVal(float *convOutput, int index, int size) {
     int i, baseIndex;
     float maxVal;
@@ -436,6 +500,16 @@ float maxVal(float *convOutput, int index, int size) {
 }
 
 
+/**
+ * @brief Finds the minimum value in a subset of a convolutional output tensor.
+ *
+ * This function finds the minimum value within a specific region of a convolutional output tensor.
+ *
+ * @param convOutput Pointer to the convolutional output tensor.
+ * @param index Index of the subset to analyze.
+ * @param size Size of the subset to analyze.
+ * @return The minimum value within the specified subset.
+ */
 float minVal(float *convOutput, int index, int size) {
     int i, baseIndex;
     float minVal;
@@ -453,6 +527,17 @@ float minVal(float *convOutput, int index, int size) {
 }
 
 
+/**
+ * @brief Calculates the Root Mean Square Error (RMSE) between two subsets of a convolutional output tensor.
+ *
+ * This function calculates the RMSE between two subsets of a convolutional output tensor.
+ *
+ * @param convOutput Pointer to the convolutional output tensor.
+ * @param indexFirstAlg Index of the first subset to compare.
+ * @param indexSecondAlg Index of the second subset to compare.
+ * @param size Size of the subsets to compare.
+ * @return The RMSE between the two subsets.
+ */
 double calcRootMediumSqErr(float *convOutput, int indexFirstAlg, int indexSecondAlg, int size){
 
     int i, baseIndexFirstAlg, baseIndexSecondAlg;
@@ -474,6 +559,17 @@ double calcRootMediumSqErr(float *convOutput, int indexFirstAlg, int indexSecond
 }
 
 
+/**
+ * @brief Calculates the maximum relative error between two subsets of a convolutional output tensor.
+ *
+ * This function calculates the maximum relative error between two subsets of a convolutional output tensor.
+ *
+ * @param convOutput Pointer to the convolutional output tensor.
+ * @param indexFirstAlg Index of the first subset to compare.
+ * @param indexSecondAlg Index of the second subset to compare.
+ * @param size Size of the subsets to compare.
+ * @return The maximum relative error between the two subsets.
+ */
 double calcMaxRelErr(float *convOutput, int indexFirstAlg, int indexSecondAlg, int size){
 	int i, baseIndexFirstAlg, baseIndexSecondAlg;
 	double maxRelErr, relativeError;
@@ -495,6 +591,19 @@ double calcMaxRelErr(float *convOutput, int indexFirstAlg, int indexSecondAlg, i
 }
 
 
+/**
+ * @brief Calculates various metrics for the resilience evaluation of convolutional algorithms.
+ *
+ * This function calculates several metrics (max, min, RMSE, max relative error) for pairs of valid convolutional outputs,
+ * and writes the results to a file.
+ *
+ * @param outputFile Pointer to the output file.
+ * @param injectionId Identifier for the injection.
+ * @param validConvolutionIds Array of valid convolution IDs.
+ * @param validConvolutionsCount Number of valid convolutions.
+ * @param convOutputs Pointer to the convolutional outputs tensor.
+ * @param convOutputShape Pointer to the shape of the convolutional outputs tensor.
+ */
 void calculateMetrics(FILE* outputFile, int injectionId, int * validConvolutionIds, int validConvolutionsCount, float *convOutputs, int * convOutputShape){
 	int i, j, tensorSize;
 	float maxFirstAlg, maxSecondAlg, minFirstAlg, minSecondAlg;
@@ -534,14 +643,24 @@ void calculateMetrics(FILE* outputFile, int injectionId, int * validConvolutionI
 
 
 int main(int argc, char **argv) {
-  // Process args (if you need it)
+    // Check if the correct number of arguments are provided
+    if (argc != 4) {
+        std::cerr << "Incorrect parameters passed" << std::endl;
+        return 1;
+    }
+
+    // Assign the arguments to variables
+    std::string tensorBinFilePath = argv[1];
+    std::string faultListPath = argv[2];
+    std::string outputPath = argv[3];
+
 
   // Create cudnn handle (pass this to perform convolutions)
   cudnnHandle_t cudnn;
   CUDNN_CALL(cudnnCreate(&cudnn));
 
   // Read binary data for tensors
-  FILE *file = fopen("tensors.bin", "rb");
+  FILE *file = fopen(tensorBinFilePath, "rb");
   if (file == NULL) {
       perror("Failed to open file");
       return EXIT_FAILURE;
@@ -590,13 +709,13 @@ int main(int argc, char **argv) {
   int bitPos;
   int tmp;
 
-  FILE *fileInput = fopen("faultList.csv", "r");
+  FILE *fileInput = fopen(faultListPath, "r");
   if (fileInput == NULL) {
       perror("Failed to open the cvs fault_list file");
       return EXIT_FAILURE;
   }
 
-  FILE *fileOutput = fopen("FaultInjection.csv", "w");
+  FILE *fileOutput = fopen(outputPath, "w");
   if (fileOutput == NULL) {
       perror("Error");
       return EXIT_FAILURE;
