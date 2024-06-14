@@ -4,8 +4,10 @@ __Authors:__ _Giovanni Vaccarino - Nicolò Vacis_
 
 __Supervising Professor:__ _Antonio Miele_
 
+This README explains the two fault injection campaigns developed for the project. The first framework includes the study of the resilience evaluation of Visual Transformers, while the second one focuses on the resilience of some convolutional algorithms. This document provides detailed instructions on how to use each script, including the required command line parameters and example commands.
+
 ## Framework for the resilience evaluation of ViT
-This first framework is composed by three scripts, contained in the Framework_Python directory: 
+The first framework is composed by three scripts, contained in the Framework_Python directory: 
 1. GenerateFaultList.py 
 2. FaultInjection.py
 3. GraphAnalysis.py
@@ -52,9 +54,9 @@ python GraphAnalysis.py --file_path <injection_output_path> --weights_path <path
 
 
 ## Framework for the resilience evaluation of different convolution algorithms
-This second framework is composed by three scripts, contained in the Framework_CUDA directory: 
+The second framework is composed by three scripts, contained in the Framework_CUDA directory: 
 1. GenerateFaultList.py 
-2. FaultInjection.py
+2. FaultInjection.cpp
 3. GraphAnalysis.py
 
 __NOTE:__ In order to run these scripts, it is required to have the following libraries installed: pythorch, tqdm, numpy, ...
@@ -76,6 +78,7 @@ This script representing the main executing environment, providing the output on
 1. _csv_input_path_ -> the path of the fault list used
 2. _csv_output_path_ -> the path of the desired to save your generated fault list
 
+_name_executable_ is the desired name for the .exe file.
 First it is necessary to compile using the following command:
 
 ```bash
