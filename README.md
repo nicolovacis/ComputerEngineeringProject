@@ -89,7 +89,7 @@ nvcc -o <name_executable> FaultInjection.cpp -lcudnn
 Now to run use the following command:
 
 ```bash
-./<name_executable> <csv_input_path> <csv_output_path>
+./<name_executable> <bin_file_tensors> <csv_input_path> <csv_output_path>
 ```
 
 ### GraphAnalysis
