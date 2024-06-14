@@ -1,3 +1,5 @@
+import argparse
+
 import pandas as pd
 import torch
 import numpy as np
@@ -83,10 +85,6 @@ def vulnerability_plot(type, file):
 
 
 if __name__ == "__main__":
-
-    #COLAB PATH (testing):
-    #file_path = 'injection_output.csv'
-    #weight_path = '/content/drive/MyDrive/Colab Notebooks/vit_iiipet_train_best.pth'
 
     parser = argparse.ArgumentParser(
         prog='GraphAnalysis',
