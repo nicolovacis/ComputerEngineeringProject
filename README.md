@@ -12,7 +12,7 @@ The first framework is composed by three scripts, contained in the Framework_ViT
 2. FaultInjection.py
 3. GraphAnalysis.py
 
-__NOTE:__ In order to run these scripts, it is required to have the following libraries installed: pythorch, tqdm, numpy, ...
+__NOTE:__ In order to run these scripts, it is required to have the following libraries installed: torch, torchvision, tqdm, numpy, pandas
 
 ### GenerateFaultList
 This first script of the framework generates a Fault List in a CSV format, given the following command line parameters:
@@ -59,7 +59,7 @@ The second framework is composed by three scripts, contained in the Framework_Co
 2. FaultInjection.cpp
 3. GraphAnalysis.py
 
-__NOTE:__ In order to run these scripts, it is required to have the following libraries installed: pythorch, tqdm, numpy, ...
+__NOTE:__ In order to run these scripts, it is required to have the following libraries installed: cuda, cdnn, numpy, pandas
 
 ### GenerateFaultList
 This first script of the framework generates a Fault List in a CSV format, given the following command line parameters:
