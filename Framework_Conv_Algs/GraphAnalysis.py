@@ -198,8 +198,23 @@ def print_injection_id_labels(file_path):
     print(label_1_injection_ids)
 
 if __name__ == "__main__":
-    fileFaultInj = 'FaultInjection.csv'
-    fileFaultList = 'faultList.csv'
+
+    parser = argparse.ArgumentParser(
+        prog='GraphAnalysis',
+        description='Script that generates graph to analyse the injections\' output ',
+    )
+
+    parser.add_argument('--fileFaultInj_path', type=str, required=True)
+    parser.add_argument('--faultList_path', type=str, required=True)
+
+    args = parser.parse_args()
+
+    fileFaultInj = args.fileFaultInj_path
+    fileFaultList = args.faultList_path
+
+    #TESTING
+    #fileFaultInj = 'FaultInjection.csv'
+    #fileFaultList = 'faultList.csv'
 
     nan_count(fileFaultInj, 'rootMediumSqErr')
     nan_on_bitpos(fileFaultInj, fileFaultList, 'rootMediumSqErr')
@@ -209,3 +224,4 @@ if __name__ == "__main__":
     find_most_different_algorithm(fileFaultInj)
     #plot_injection_id_labels(fileFaultInj)
     print_injection_id_labels(fileFaultInj)
+
